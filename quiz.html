@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Elizabeth Xi Bauer Sales Quiz — Synced</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
+  .container{max-width:1200px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.1);overflow:hidden}
+  .header{background:linear-gradient(135deg,#2c3e50,#3498db);color:#fff;padding:30px;text-align:center}
+  .header h1{font-size:2.2rem;margin-bottom:8px;font-weight:700}
+  .game-controls{padding:20px;background:#f8f9fa;border-bottom:1px solid #e9ecef}
+  .controls-row{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .room-controls{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+  .room-controls input[type="text"]{padding:10px 14px;border:2px solid #ddd;border-radius:10px;font-size:1rem}
+  .room-badge{background:#eaf2ff;color:#1d4ed8;padding:6px 10px;border-radius:999px;font-weight:600}
+  .letter-display{background:#e74c3c;color:#fff;width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.2rem;font-weight:800;box-shadow:0 4px 15px rgba(231,76,60,.3)}
+  .timer{background:#27ae60;color:#fff;padding:12px 18px;border-radius:999px;font-size:1.2rem;font-weight:800;min-width:120px;text-align:center;box-shadow:0 4px 15px rgba(39,174,96,.3)}
+  .timer.warning{background:#f39c12;animation:pulse 1s infinite}
+  .timer.danger{background:#e74c3c;animation:pulse .5s infinite}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+  .btn{padding:10px 18px;border:none;border-radius:999px;font-size:.95rem;font-weight:700;cursor:pointer;transition:.2s all;text-transform:uppercase;letter-spacing:.5px}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .btn-primary{background:#3498db;color:#fff}.btn-primary:hover{background:#2980b9;transform:translateY(-1px)}
+  .btn-success{background:#27ae60;color:#fff}.btn-success:hover{background:#229954;transform:translateY(-1px)}
+  .btn-warning{background:#f39c12;color:#fff}.btn-warning:hover{background:#e67e22;transform:translateY(-1px)}
+  .btn-danger{background:#e74c3c;color:#fff}.btn-danger:hover{background:#c0392b;transform:translateY(-1px)}
+  .time-selector{display:flex;gap:10px;align-items:center}
+  .time-selector select{padding:8px 12px;border:2px solid #ddd;border-radius:8px;font-size:1rem}
+  .players-section{padding:24px}
+  .add-player{display:flex;gap:12px;margin-bottom:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .add-player input{padding:10px 14px;border:2px solid #ddd;border-radius:999px;font-size:1rem;min-width:220px}
+  .quiz-table{width:100%;border-collapse:collapse;margin-top:10px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,.06)}
+  .quiz-table th{background:linear-gradient(135deg,#34495e,#2c3e50);color:#fff;padding:14px 10px;text-align:center;font-weight:700;font-size:1rem}
+  .quiz-table td{padding:10px;text-align:center;border-bottom:1px solid #ecf0f1}
+  .quiz-table tr:nth-child(even){background:#f8f9fa}
+  .player-name{font-weight:700;color:#2c3e50;background:#ecf0f1;padding:8px;border-radius:8px}
+  .quiz-table input[type="text"]{width:100%;padding:8px 10px;border:2px solid #ddd;border-radius:8px;font-size:.9rem;text-align:center}
+  .quiz-table input:disabled{background:#f5f5f5;color:#666}
+  .score-note{display:block;margin-top:4px;color:#27ae60;font-weight:700;font-size:.8rem}
+  .total-score{font-weight:900;font-size:1.05rem;color:#27ae60;background:#d5f4e6;border-radius:8px;padding:8px}
+  .results-section{padding:24px;background:#f8f9fa;border-top:1px solid #e9ecef}
+  .results-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:14px}
+  .category-results{background:#fff;padding:16px;border-radius:10px;box-shadow:0 4px 15px rgba(0,0,0,.06)}
+  .category-results h3{color:#2c3e50;margin-bottom:10px;font-size:1.1rem}
+  .answer-item{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;margin:5px 0;border-radius:8px;background:#f8f9fa}
+  .unique-answer{background:#d5f4e6;border-left:4px solid #27ae60}
+  .shared-answer{background:#fff3cd;border-left:4px solid #f39c12}
+  .score-badge{background:#3498db;color:#fff;padding:2px 8px;border-radius:999px;font-size:.8rem;font-weight:800}
+  .game-status{text-align:center;padding:10px;font-size:1rem;font-weight:700}
+  .status-waiting{color:#7f8c8d}.status-playing{color:#27ae60}.status-finished{color:#e74c3c}
+  @media (max-width:768px){.quiz-table{font-size:.85rem}.header h1{font-size:1.8rem}}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎯 Elizabeth Xi Bauer Sales Quiz</h1>
+      <p>Play the same round at the same time on any device.</p>
+    </div>
+
+    <div class="game-controls">
+      <div class="room-controls">
+        <label><input type="checkbox" id="isHost"> I’m the host</label>
+        <input type="text" id="roomCode" placeholder="Room code (e.g. EXB1)" maxlength="12">
+        <button class="btn btn-primary" id="joinRoomBtn">Create / Join Room</button>
+        <span class="room-badge" id="roomBadge" style="display:none;"></span>
+      </div>
+
+      <div class="controls-row">
+        <div class="letter-display" id="letterDisplay">?</div>
+        <div class="timer" id="timer">Ready</div>
+        <div class="time-selector">
+          <label for="timeSelect">Timer:</label>
+          <select id="timeSelect">
+            <option value="30">30s</option>
+            <option value="60" selected>1m</option>
+            <option value="90">90s</option>
+            <option value="120">2m</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="generateBtn" disabled>Generate Letter</button>
+        <button class="btn btn-success" id="startBtn" disabled>Start Quiz</button>
+        <button class="btn btn-warning" id="endBtn" disabled>End Round</button>
+        <button class="btn btn-danger" id="calculateBtn" disabled>Calculate Scores</button>
+      </div>
+    </div>
+
+    <div class="players-section">
+      <div class="add-player">
+        <input type="text" id="playerNameInput" placeholder="Enter player name" maxlength="20" disabled>
+        <button class="btn btn-primary" id="addPlayerBtn" disabled>Add Player</button>
+      </div>
+
+      <div class="game-status status-waiting" id="gameStatus">Join a room to begin.</div>
+
+      <table class="quiz-table" id="quizTable">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Boy's Name</th>
+            <th>Girl's Name</th>
+            <th>Animal</th>
+            <th>Food</th>
+            <th>Pitch</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="playersTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="results-section" id="resultsSection" style="display:none;">
+      <h2 style="text-align:center;color:#2c3e50;margin-bottom:10px;">📊 Quiz Results</h2>
+      <div class="results-grid" id="resultsGrid"></div>
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script type="module">
+    // ✅ Your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyD6eKiFVGujxjO_9YHvLQXd1BPVQ6JOiEE",
+      authDomain: "exb-quiz.firebaseapp.com",
+      projectId: "exb-quiz",
+      storageBucket: "exb-quiz.appspot.com", // corrected
+      messagingSenderId: "738969851639",
+      appId: "1:738969851639:web:b2859010985a240957e5f2"
+    };
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
+    import { 
+      getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, serverTimestamp, collection, addDoc 
+    } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Sign in before wiring buttons, show helpful error if auth fails
+    try {
+      await signInAnonymously(auth);
+    } catch (e) {
+      alert("Anonymous auth failed. Enable it in Firebase Console → Authentication → Sign-in method.");
+      throw e;
+    }
+
+    // UI elements
+    const isHostEl = document.getElementById('isHost');
+    const roomCodeEl = document.getElementById('roomCode');
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    const roomBadge = document.getElementById('roomBadge');
+
+    const letterDisplay = document.getElementById('letterDisplay');
+    const timerEl = document.getElementById('timer');
+
+    const timeSelect = document.getElementById('timeSelect');
+    const generateBtn = document.getElementById('generateBtn');
+    const startBtn = document.getElementById('startBtn');
+    const endBtn = document.getElementById('endBtn');
+    const calculateBtn = document.getElementById('calculateBtn');
+
+    const addPlayerBtn = document.getElementById('addPlayerBtn');
+    const playerNameInput = document.getElementById('playerNameInput');
+    const playersTableBody = document.getElementById('playersTableBody');
+
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsGrid = document.getElementById('resultsGrid');
+    const gameStatus = document.getElementById('gameStatus');
+
+    const CATEGORIES = ['boys_name','girls_name','animal','food','pitch'];
+    const CATEGORY_NAMES = {
+      boys_name:"Boy's Name",
+      girls_name:"Girl's Name",
+      animal:"Animal",
+      food:"Food",
+      pitch:"Pitch"
+    };
+
+    let roomRef = null;
+    let playersColRef = null;
+    let answersColRef = null;
+    let unsubscribeRoom = null;
+    let unsubscribePlayers = null;
+    let unsubscribeAnswers = null;
+
+    const state = {
+      isHost: false,
+      roomCode: null,
+      players: [],
+      answers: {},
+      gameState: 'waiting',
+      currentLetter: '',
+      duration: 60,
+      startAt: null,
+      results: null
+    };
+
+    function setControlsEnabled(joined) {
+      playerNameInput.disabled = !joined;
+      addPlayerBtn.disabled = !joined;
+      generateBtn.disabled = !(joined && state.isHost);
+      startBtn.disabled = !(joined && state.isHost);
+      endBtn.disabled = !(joined && state.isHost);
+      calculateBtn.disabled = !(joined && state.isHost && state.gameState==='finished');
+      timeSelect.disabled = !(joined && state.isHost && state.gameState!=='playing');
+    }
+
+    function updateStatus() {
+      const { gameState, currentLetter } = state;
+      if (gameState==='waiting') {
+        gameStatus.textContent = currentLetter ? `Ready with letter "${currentLetter}". Host can start anytime.` : 'Add players and generate a letter to begin.';
+        gameStatus.className = 'game-status status-waiting';
+        timerEl.textContent = 'Ready';
+        timerEl.className = 'timer';
+      } else if (gameState==='playing') {
+        gameStatus.textContent = `Quiz in progress. Find words starting with "${currentLetter}".`;
+        gameStatus.className = 'game-status status-playing';
+      } else {
+        gameStatus.textContent = 'Time’s up. Host can calculate scores.';
+        gameStatus.className = 'game-status status-finished';
+      }
+    }
+
+    function renderPlayersTable() {
+      playersTableBody.innerHTML = '';
+      const letter = state.currentLetter || '?';
+
+      state.players
+        .slice()
+        .sort((a,b)=> (b.total||0)-(a.total||0))
+        .forEach(p => {
+          const tr = document.createElement('tr');
+          let html = `<td class="player-name">${p.name}</td>`;
+          CATEGORIES.forEach(cat => {
+            const val = (state.answers[p.id]?.[cat]||'');
+            const score = (p.scores?.[cat]||0);
+            html += `
+              <td>
+                <input type="text" 
+                  ${state.gameState==='playing' ? '' : 'disabled'}
+                  data-player="${p.id}" data-category="${cat}"
+                  placeholder="Starts with ${letter}" value="${escapeHtml(val)}">
+                <small class="score-note">${score? `(${score} pts)` : ''}</small>
+              </td>`;
+          });
+          html += `<td class="total-score">${p.total||0}</td>`;
+          tr.innerHTML = html;
+          playersTableBody.appendChild(tr);
+        });
+
+      // input handlers for live write
+      playersTableBody.querySelectorAll('input[type="text"]').forEach(inp=>{
+        inp.addEventListener('input', async (e)=>{
+          const pid = e.target.dataset.player;
+          const cat = e.target.dataset.category;
+          const v = e.target.value;
+          if (!roomRef) return;
+          const ansDoc = doc(answersColRef, pid);
+          try {
+            await setDoc(ansDoc, { [cat]: v }, { merge: true });
+          } catch (err) {
+            console.error(err);
+            alert("Could not save answer. Check Firestore rules and network.");
+          }
+        });
+      });
+    }
+
+    function escapeHtml(str){
+      return (str||'').replace(/[&<>'"]/g, s=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;' }[s]));
+    }
+
+    // TIMER — based on server startAt
+    let timerInterval = null;
+    function startLocalTimer() {
+      stopLocalTimer();
+      timerInterval = setInterval(updateTimerFace, 250);
+    }
+    function stopLocalTimer() {
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    }
+    function updateTimerFace() {
+      if (!state.startAt || state.gameState!=='playing') return;
+      const startMs = state.startAt.toMillis();
+      const now = Date.now();
+      const endMs = startMs + state.duration*1000;
+      const remaining = Math.max(0, Math.floor((endMs - now)/1000));
+      const m = Math.floor(remaining/60);
+      const s = remaining%60;
+      timerEl.textContent = `${m}:${String(s).padStart(2,'0')}`;
+      timerEl.className = 'timer';
+      if (remaining<=10) timerEl.classList.add('danger');
+      else if (remaining<=30) timerEl.classList.add('warning');
+      if (remaining===0) stopLocalTimer();
+    }
+
+    // ROOM JOIN / LISTEN
+    joinRoomBtn.addEventListener('click', async ()=>{
+      const code = roomCodeEl.value.trim().toUpperCase();
+      if (!code) { alert('Enter a room code.'); return; }
+      state.isHost = isHostEl.checked;
+      state.roomCode = code;
+
+      roomRef = doc(db, 'rooms', code);
+      playersColRef = collection(roomRef, 'players');
+      answersColRef = collection(roomRef, 'answers');
+
+      try {
+        const exists = await getDoc(roomRef);
+        if (!exists.exists()) {
+          // create new room
+          await setDoc(roomRef, {
+            createdAt: serverTimestamp(),
+            gameState: 'waiting',
+            currentLetter: '',
+            duration: Number(timeSelect.value)||60,
+            startAt: null,
+            results: null
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Couldn't create/join room. Check your Firestore rules and that Firestore is enabled.");
+        return;
+      }
+
+      // listeners
+      if (unsubscribeRoom) unsubscribeRoom();
+      if (unsubscribePlayers) unsubscribePlayers();
+      if (unsubscribeAnswers) unsubscribeAnswers();
+
+      unsubscribeRoom = onSnapshot(roomRef, (snap)=>{
+        const data = snap.data();
+        if (!data) return;
+        state.gameState = data.gameState;
+        state.currentLetter = data.currentLetter || '';
+        state.duration = data.duration || 60;
+        state.startAt = data.startAt || null;
+        state.results = data.results || null;
+
+        letterDisplay.textContent = state.currentLetter || '?';
+        timeSelect.value = String(state.duration);
+
+        if (state.gameState==='playing') startLocalTimer();
+        if (state.gameState!=='playing') { stopLocalTimer(); updateTimerFace(); }
+
+        if (state.results) {
+          renderResults(state.results);
+          resultsSection.style.display = 'block';
+        } else {
+          resultsSection.style.display = 'none';
+          resultsGrid.innerHTML = '';
+        }
+
+        updateStatus();
+        setControlsEnabled(true);
+        calculateBtn.disabled = !(state.isHost && state.gameState==='finished');
+      }, (err)=>{
+        console.error(err);
+        alert("Realtime updates failed. Check network and Firestore rules.");
+      });
+
+      unsubscribePlayers = onSnapshot(playersColRef, (qs)=>{
+        state.players = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+        renderPlayersTable();
+      });
+
+      unsubscribeAnswers = onSnapshot(answersColRef, (qs)=>{
+        state.answers = {};
+        qs.forEach(d => { state.answers[d.id] = d.data(); });
+        renderPlayersTable();
+      });
+
+      roomBadge.style.display = 'inline-block';
+      roomBadge.textContent = `Room: ${code} ${state.isHost? '(Host)':''}`;
+      setControlsEnabled(true);
+      playerNameInput.focus();
+      gameStatus.textContent = 'Connected. Add players to begin.';
+    });
+
+    // ADD PLAYER
+    addPlayerBtn.addEventListener('click', addPlayer);
+    playerNameInput.addEventListener('keypress', e=>{ if (e.key==='Enter') addPlayer(); });
+
+    async function addPlayer() {
+      if (!playersColRef) return;
+      const name = playerNameInput.value.trim();
+      if (!name) return;
+
+      const existing = state.players.find(p => p.name.toLowerCase()===name.toLowerCase());
+      if (existing) { alert('That name is already taken in this room.'); return; }
+
+      try {
+        await addDoc(playersColRef, {
+          name,
+          scores: { boys_name:0,girls_name:0,animal:0,food:0,pitch:0 },
+          total: 0
+        });
+        playerNameInput.value = '';
+        playerNameInput.focus();
+      } catch (err) {
+        console.error(err);
+        alert("Could not add player. Check Firestore rules.");
+      }
+    }
+
+    // HOST ACTIONS
+    generateBtn.addEventListener('click', async ()=>{
+      if (!state.isHost || !roomRef) return;
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const letter = letters[Math.floor(Math.random()*letters.length)];
+      try {
+        await updateDoc(roomRef, { currentLetter: letter, gameState: 'waiting', startAt: null, results: null });
+      } catch (err) {
+        console.error(err);
+        alert("Failed to generate letter. Check rules.");
+      }
+    });
+
+    startBtn.addEventListener('click', async ()=>{
+      if (!state.isHost || !roomRef) return;
+      const duration = Number(timeSelect.value)||60;
+      try {
+        await updateDoc(roomRef, { 
+          gameState: 'playing',
+          duration: duration,
+          startAt: serverTimestamp(),
+          results: null
+        });
+        // clear answers + reset scores
+        for (const p of state.players) {
+          const ansDoc = doc(answersColRef, p.id);
+          await setDoc(ansDoc, {}, { merge: false }).catch(()=>{});
+        }
+        for (const p of state.players) {
+          const pDoc = doc(playersColRef, p.id);
+          await updateDoc(pDoc, { scores: { boys_name:0,girls_name:0,animal:0,food:0,pitch:0 }, total: 0 });
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Failed to start round. Check rules.");
+      }
+    });
+
+    endBtn.addEventListener('click', async ()=>{
+      if (!state.isHost || !roomRef) return;
+      try {
+        await updateDoc(roomRef, { gameState: 'finished' });
+      } catch (err) {
+        console.error(err);
+        alert("Failed to end round. Check rules.");
+      }
+    });
+
+    calculateBtn.addEventListener('click', async ()=>{
+      if (!state.isHost || !roomRef) return;
+      const players = state.players;
+      const answers = state.answers;
+
+      const grouping = {};
+      CATEGORIES.forEach(c => grouping[c] = {});
+
+      players.forEach(p=>{
+        const pa = answers[p.id]||{};
+        CATEGORIES.forEach(cat=>{
+          const raw = (pa[cat]||'').trim();
+          if (!raw) return;
+          const key = raw.toLowerCase();
+          if (!grouping[cat][key]) grouping[cat][key] = { display: raw, players: [] };
+          grouping[cat][key].players.push(p.id);
+        });
+      });
+
+      const newScores = {};
+      players.forEach(p=>{
+        newScores[p.id] = { boys_name:0,girls_name:0,animal:0,food:0,pitch:0, total:0 };
+      });
+
+      CATEGORIES.forEach(cat=>{
+        Object.values(grouping[cat]).forEach(entry=>{
+          const score = entry.players.length===1 ? 10 : 5;
+          entry.players.forEach(pid=>{
+            newScores[pid][cat] = score;
+          });
+        });
+      });
+
+      players.forEach(p=>{
+        const sc = newScores[p.id];
+        sc.total = CATEGORIES.reduce((s,cat)=>s+(sc[cat]||0),0);
+      });
+
+      try {
+        for (const p of players) {
+          const pDoc = doc(playersColRef, p.id);
+          const sc = newScores[p.id];
+          await updateDoc(pDoc, { 
+            scores: {
+              boys_name:sc.boys_name,
+              girls_name:sc.girls_name,
+              animal:sc.animal,
+              food:sc.food,
+              pitch:sc.pitch
+            },
+            total: sc.total
+          });
+        }
+
+        const results = {};
+        CATEGORIES.forEach(cat=>{
+          results[cat] = Object.values(grouping[cat]).map(entry=>{
+            const names = entry.players.map(pid => players.find(pp=>pp.id===pid)?.name || 'Unknown');
+            return {
+              display: entry.display,
+              players: names,
+              score: entry.players.length===1 ? 10 : 5,
+              unique: entry.players.length===1
+            };
+          });
+        });
+
+        await updateDoc(roomRef, { results });
+      } catch (err) {
+        console.error(err);
+        alert("Failed to calculate scores. Check rules.");
+      }
+    });
+
+    function renderResults(results) {
+      resultsGrid.innerHTML = '';
+      CATEGORIES.forEach(cat=>{
+        const div = document.createElement('div');
+        div.className = 'category-results';
+        let html = `<h3>${CATEGORY_NAMES[cat]}</h3>`;
+        const items = results[cat]||[];
+        if (!items.length) {
+          html += `<p style="color:#7f8c8d;font-style:italic;">No answers submitted</p>`;
+        } else {
+          items.forEach(it=>{
+            html += `
+              <div class="answer-item ${it.unique ? 'unique-answer':'shared-answer'}">
+                <span><strong>${escapeHtml(it.display)}</strong> — ${it.players.map(escapeHtml).join(', ')}</span>
+                <span class="score-badge">${it.score} pts</span>
+              </div>`;
+          });
+        }
+        div.innerHTML = html;
+        resultsGrid.appendChild(div);
+      });
+    }
+
+    // Initial UI state
+    setControlsEnabled(false);
+    updateStatus();
+  </script>
+</body>
+</html>
