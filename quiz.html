@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Elizabeth Xi Bauer Sales Quiz — Synced</title>
+<title>Elizabeth Xi Bauer Sales Quiz — Private Players, Host Sees All</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%, #764ba2 100%);min-height:100vh;padding:20px}
@@ -50,6 +50,7 @@
   .score-badge{background:#3498db;color:#fff;padding:2px 8px;border-radius:999px;font-size:.8rem;font-weight:800}
   .game-status{text-align:center;padding:10px;font-size:1rem;font-weight:700}
   .status-waiting{color:#7f8c8d}.status-playing{color:#27ae60}.status-finished{color:#e74c3c}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
   @media (max-width:768px){.quiz-table{font-size:.85rem}.header h1{font-size:1.8rem}}
 </style>
 </head>
@@ -57,7 +58,7 @@
   <div class="container">
     <div class="header">
       <h1>🎯 Elizabeth Xi Bauer Sales Quiz</h1>
-      <p>Play the same round at the same time on any device.</p>
+      <p>Private player view; host sees all answers.</p>
     </div>
 
     <div class="game-controls">
@@ -89,8 +90,8 @@
 
     <div class="players-section">
       <div class="add-player">
-        <input type="text" id="playerNameInput" placeholder="Enter player name" maxlength="20" disabled>
-        <button class="btn btn-primary" id="addPlayerBtn" disabled>Add Player</button>
+        <input type="text" id="playerNameInput" placeholder="Enter your name" maxlength="20" disabled>
+        <button class="btn btn-primary" id="addPlayerBtn" disabled>Save / Update My Name</button>
       </div>
 
       <div class="game-status status-waiting" id="gameStatus">Join a room to begin.</div>
@@ -142,6 +143,8 @@
     try { await signInAnonymously(auth); }
     catch (e) { alert("Anonymous auth failed. Enable it in Firebase Console → Authentication → Sign-in method."); throw e; }
 
+    const currentUid = auth.currentUser.uid;
+
     // UI elements
     const isHostEl = document.getElementById('isHost');
     const roomCodeEl = document.getElementById('roomCode');
@@ -184,8 +187,10 @@
     const state = {
       isHost: false,
       roomCode: null,
+      hostUid: null,
       players: [],
       answers: {},
+      myPlayer: null, // current user's player object (if not host)
       gameState: 'waiting',
       currentLetter: '',
       duration: 60,
@@ -194,19 +199,21 @@
     };
 
     function setControlsEnabled(joined) {
+      const host = state.isHost && state.hostUid === currentUid; // true host
       playerNameInput.disabled = !joined;
       addPlayerBtn.disabled = !joined;
-      generateBtn.disabled = !(joined && state.isHost);
-      startBtn.disabled = !(joined && state.isHost);
-      endBtn.disabled = !(joined && state.isHost);
-      calculateBtn.disabled = !(joined && state.isHost && state.gameState==='finished');
-      timeSelect.disabled = !(joined && state.isHost && state.gameState!=='playing');
+
+      generateBtn.disabled = !(joined && host);
+      startBtn.disabled = !(joined && host);
+      endBtn.disabled = !(joined && host);
+      calculateBtn.disabled = !(joined && host && state.gameState==='finished');
+      timeSelect.disabled = !(joined && host && state.gameState!=='playing');
     }
 
     function updateStatus() {
       const { gameState, currentLetter } = state;
       if (gameState==='waiting') {
-        gameStatus.textContent = currentLetter ? `Ready with letter "${currentLetter}". Host can start anytime.` : 'Add players and generate a letter to begin.';
+        gameStatus.textContent = currentLetter ? `Ready with letter "${currentLetter}". Host can start anytime.` : 'Add your name and wait for host to start.';
         gameStatus.className = 'game-status status-waiting';
         timerEl.textContent = 'Ready';
         timerEl.className = 'timer';
@@ -214,25 +221,24 @@
         gameStatus.textContent = `Quiz in progress. Find words starting with "${currentLetter}".`;
         gameStatus.className = 'game-status status-playing';
       } else {
-        gameStatus.textContent = 'Time’s up. Host can calculate scores.';
+        gameStatus.textContent = 'Time’s up. Host will calculate scores.';
         gameStatus.className = 'game-status status-finished';
       }
     }
 
-    // --------- DOM helpers to avoid focus loss ----------
+    // --------- DOM helpers (no focus loss) ----------
     function ensureRow(player) {
       let row = document.getElementById(`row-${player.id}`);
       if (!row) {
         row = document.createElement('tr');
         row.id = `row-${player.id}`;
-        // Player name cell
+
         const nameTd = document.createElement('td');
         nameTd.className = 'player-name';
         nameTd.id = `name-${player.id}`;
         nameTd.textContent = player.name;
         row.appendChild(nameTd);
 
-        // Category cells (create once)
         CATEGORIES.forEach(cat => {
           const td = document.createElement('td');
           td.id = `cell-${player.id}-${cat}`;
@@ -243,14 +249,16 @@
           input.dataset.player = player.id;
           input.dataset.category = cat;
           input.placeholder = `Starts with ${state.currentLetter || '?'}`;
-          input.disabled = (state.gameState !== 'playing');
 
-          // attach listener once
+          // player can only edit their own inputs; host can edit none (host just views)
+          const editable = (player.id === currentUid) && (state.gameState === 'playing');
+          input.disabled = !editable;
+
           input.addEventListener('input', async (e)=>{
             const pid = e.target.dataset.player;
             const category = e.target.dataset.category;
             const val = e.target.value;
-            if (!answersColRef) return;
+            if (!answersColRef || pid !== currentUid) return; // only write own
             const ansDoc = doc(answersColRef, pid);
             try { await setDoc(ansDoc, { [category]: val }, { merge: true }); }
             catch (err) { console.error(err); }
@@ -266,7 +274,6 @@
           row.appendChild(td);
         });
 
-        // Total cell
         const totalTd = document.createElement('td');
         totalTd.className = 'total-score';
         totalTd.id = `total-${player.id}`;
@@ -279,25 +286,21 @@
     }
 
     function syncRowValues(player) {
-      // name
       const nameEl = document.getElementById(`name-${player.id}`);
       if (nameEl && nameEl.textContent !== player.name) nameEl.textContent = player.name;
 
-      // scores + placeholders + disabled state
       CATEGORIES.forEach(cat => {
         const input = document.getElementById(`input-${player.id}-${cat}`);
         const scoreNote = document.getElementById(`score-${player.id}-${cat}`);
         if (!input || !scoreNote) return;
 
-        // enable/disable without recreating
-        const shouldDisable = (state.gameState !== 'playing');
-        if (input.disabled !== shouldDisable) input.disabled = shouldDisable;
+        // editable only for current user's row while playing
+        const editable = (player.id === currentUid) && (state.gameState === 'playing');
+        if (input.disabled === editable) input.disabled = !editable;
 
-        // placeholder reflects current letter
         const desiredPh = `Starts with ${state.currentLetter || '?'}`;
         if (input.placeholder !== desiredPh) input.placeholder = desiredPh;
 
-        // set value only if different (to preserve caret + IME)
         const newVal = (state.answers[player.id]?.[cat] || '');
         if (input.value !== newVal) input.value = newVal;
 
@@ -311,28 +314,21 @@
       }
     }
 
-    function removeMissingRows(currentPlayerIds) {
-      const rows = Array.from(playersTableBody.querySelectorAll('tr'));
-      rows.forEach(r => {
-        const pid = r.id.replace('row-','');
-        if (!currentPlayerIds.includes(pid)) r.remove();
-      });
+    function clearTable() {
+      playersTableBody.innerHTML = '';
     }
 
     function renderPlayersTable() {
-      // ensure all rows exist, then sync values
-      const ids = [];
-      state.players
+      clearTable();
+      // Host: render all. Player: render only self (if exists).
+      const rows = (state.isHost && state.hostUid === currentUid) ? state.players
+                   : state.myPlayer ? [state.myPlayer] : [];
+      rows
         .slice()
         .sort((a,b)=> (b.total||0)-(a.total||0))
-        .forEach(p => {
-          ids.push(p.id);
-          ensureRow(p);
-          syncRowValues(p);
-        });
-      removeMissingRows(ids);
+        .forEach(p => { ensureRow(p); syncRowValues(p); });
     }
-    // ----------------------------------------------------
+    // -------------------------------------------------
 
     function escapeHtml(str){
       return (str||'').replace(/[&<>'"]/g, s=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;' }[s]));
@@ -368,17 +364,25 @@
       playersColRef = collection(roomRef, 'players');
       answersColRef = collection(roomRef, 'answers');
 
+      // Create room if absent; set hostUid only if none and this user ticked Host
       try {
-        const exists = await getDoc(roomRef);
-        if (!exists.exists()) {
+        const snap = await getDoc(roomRef);
+        const exists = snap.exists();
+        const data = exists ? snap.data() : {};
+        const shouldSetHost = state.isHost && !data.hostUid;
+
+        if (!exists) {
           await setDoc(roomRef, {
             createdAt: serverTimestamp(),
             gameState: 'waiting',
             currentLetter: '',
             duration: Number(timeSelect.value)||60,
             startAt: null,
-            results: null
+            results: null,
+            hostUid: state.isHost ? currentUid : null
           });
+        } else if (shouldSetHost) {
+          await updateDoc(roomRef, { hostUid: currentUid });
         }
       } catch (err) {
         console.error(err);
@@ -391,6 +395,7 @@
       if (unsubscribePlayers) unsubscribePlayers();
       if (unsubscribeAnswers) unsubscribeAnswers();
 
+      // Room listener
       unsubscribeRoom = onSnapshot(roomRef, (snap)=>{
         const data = snap.data();
         if (!data) return;
@@ -399,6 +404,7 @@
         state.duration = data.duration || 60;
         state.startAt = data.startAt || null;
         state.results = data.results || null;
+        state.hostUid = data.hostUid || null;
 
         letterDisplay.textContent = state.currentLetter || '?';
         timeSelect.value = String(state.duration);
@@ -406,6 +412,7 @@
         if (state.gameState==='playing') startLocalTimer();
         if (state.gameState!=='playing') { stopLocalTimer(); updateTimerFace(); }
 
+        // Render results for everyone (seeing summary is fine)
         if (state.results) {
           renderResults(state.results);
           resultsSection.style.display = 'block';
@@ -416,71 +423,86 @@
 
         updateStatus();
         setControlsEnabled(true);
-        calculateBtn.disabled = !(state.isHost && state.gameState==='finished');
 
-        // update placeholders/enabled state without nuking inputs
-        state.players.forEach(syncRowValues);
+        // refresh rows placeholder/editing state
+        renderPlayersTable();
       }, (err)=>{
         console.error(err);
         alert("Realtime room updates failed. Check rules / network.");
       });
 
-      unsubscribePlayers = onSnapshot(playersColRef, (qs)=>{
-        state.players = qs.docs.map(d=>({ id:d.id, ...d.data() }));
-        renderPlayersTable();
-      });
+      // Players & answers listeners differ for host vs player
+      if (state.isHost) {
+        // HOST VIEW: subscribe to all players and all answers
+        unsubscribePlayers = onSnapshot(playersColRef, (qs)=>{
+          state.players = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+          renderPlayersTable();
+        });
 
-      unsubscribeAnswers = onSnapshot(answersColRef, (qs)=>{
-        // only update values; do not rebuild the DOM
-        const newAnswers = {};
-        qs.forEach(d => { newAnswers[d.id] = d.data(); });
-        state.answers = newAnswers;
-        // sync values into existing inputs
-        state.players.forEach(syncRowValues);
-      });
+        unsubscribeAnswers = onSnapshot(answersColRef, (qs)=>{
+          const newAnswers = {};
+          qs.forEach(d => { newAnswers[d.id] = d.data(); });
+          state.answers = newAnswers;
+          renderPlayersTable();
+        });
+      } else {
+        // PLAYER VIEW: subscribe only to own player + own answers (doc id = uid)
+        const myPlayerRef = doc(playersColRef, currentUid);
+        const myAnswersRef = doc(answersColRef, currentUid);
+
+        unsubscribePlayers = onSnapshot(myPlayerRef, (d)=>{
+          state.myPlayer = d.exists() ? ({ id: d.id, ...d.data() }) : null;
+          // keep a minimal players array for shared rendering functions
+          state.players = state.myPlayer ? [state.myPlayer] : [];
+          renderPlayersTable();
+        });
+
+        unsubscribeAnswers = onSnapshot(myAnswersRef, (d)=>{
+          state.answers = d.exists() ? { [currentUid]: d.data() } : {};
+          renderPlayersTable();
+        });
+      }
 
       roomBadge.style.display = 'inline-block';
-      roomBadge.textContent = `Room: ${code} ${state.isHost? '(Host)':''}`;
+      const hostNote = (state.isHost ? ' (Host view)' : '(Player view)');
+      roomBadge.textContent = `Room: ${code} ${hostNote}`;
       setControlsEnabled(true);
       playerNameInput.focus();
-      gameStatus.textContent = 'Connected. Add players to begin.';
+      gameStatus.textContent = 'Connected. Add your name to appear in the table.';
     });
 
-    // ADD PLAYER
-    addPlayerBtn.addEventListener('click', addPlayer);
-    playerNameInput.addEventListener('keypress', e=>{ if (e.key==='Enter') addPlayer(); });
+    // ADD/UPDATE PLAYER (one per user; ID = uid)
+    addPlayerBtn.addEventListener('click', upsertMyPlayer);
+    playerNameInput.addEventListener('keypress', e=>{ if (e.key==='Enter') upsertMyPlayer(); });
 
-    async function addPlayer() {
+    async function upsertMyPlayer() {
       if (!playersColRef) return;
       const name = playerNameInput.value.trim();
-      if (!name) return;
+      if (!name) { alert('Please enter your name.'); return; }
 
-      const existing = state.players.find(p => p.name.toLowerCase()===name.toLowerCase());
-      if (existing) { alert('That name is already taken in this room.'); return; }
-
+      const myDoc = doc(playersColRef, currentUid);
       try {
-        await addDoc(playersColRef, {
+        await setDoc(myDoc, {
           name,
+          ownerUid: currentUid,
           scores: { boys_name:0,girls_name:0,animal:0,food:0,pitch:0 },
           total: 0
-        });
-        playerNameInput.value = '';
-        playerNameInput.focus();
+        }, { merge: true });
+        playerNameInput.blur();
       } catch (err) {
         console.error(err);
-        alert("Could not add player. Check Firestore rules.");
+        alert("Could not save your player. Check Firestore rules.");
       }
     }
 
     // HOST ACTIONS
     generateBtn.addEventListener('click', async ()=>{
-      if (!state.isHost || !roomRef) return;
+      if (!(state.isHost && state.hostUid === currentUid) || !roomRef) return;
       const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
       const letter = letters[Math.floor(Math.random()*letters.length)];
       try {
         await updateDoc(roomRef, { currentLetter: letter, gameState: 'waiting', startAt: null, results: null });
-        // Update placeholders without re-render
-        state.players.forEach(syncRowValues);
+        renderPlayersTable();
       } catch (err) {
         console.error(err);
         alert("Failed to generate letter. Check rules.");
@@ -488,7 +510,7 @@
     });
 
     startBtn.addEventListener('click', async ()=>{
-      if (!state.isHost || !roomRef) return;
+      if (!(state.isHost && state.hostUid === currentUid) || !roomRef) return;
       const duration = Number(timeSelect.value)||60;
       try {
         await updateDoc(roomRef, { 
@@ -498,16 +520,15 @@
           results: null
         });
         // clear answers + reset scores
-        for (const p of state.players) {
-          const ansDoc = doc(answersColRef, p.id);
-          await setDoc(ansDoc, {}, { merge: false }).catch(()=>{});
+        if (state.players && state.players.length) {
+          for (const p of state.players) {
+            const ansDocRef = doc(answersColRef, p.id);
+            await setDoc(ansDocRef, {}, { merge: false }).catch(()=>{});
+            const pDoc = doc(playersColRef, p.id);
+            await updateDoc(pDoc, { scores: { boys_name:0,girls_name:0,animal:0,food:0,pitch:0 }, total: 0 });
+          }
         }
-        for (const p of state.players) {
-          const pDoc = doc(playersColRef, p.id);
-          await updateDoc(pDoc, { scores: { boys_name:0,girls_name:0,animal:0,food:0,pitch:0 }, total: 0 });
-        }
-        // enable inputs visually
-        state.players.forEach(syncRowValues);
+        renderPlayersTable();
       } catch (err) {
         console.error(err);
         alert("Failed to start round. Check rules.");
@@ -515,11 +536,10 @@
     });
 
     endBtn.addEventListener('click', async ()=>{
-      if (!state.isHost || !roomRef) return;
+      if (!(state.isHost && state.hostUid === currentUid) || !roomRef) return;
       try {
         await updateDoc(roomRef, { gameState: 'finished' });
-        // disable inputs visually
-        state.players.forEach(syncRowValues);
+        renderPlayersTable();
       } catch (err) {
         console.error(err);
         alert("Failed to end round. Check rules.");
@@ -527,9 +547,10 @@
     });
 
     calculateBtn.addEventListener('click', async ()=>{
-      if (!state.isHost || !roomRef) return;
-      const players = state.players;
-      const answers = state.answers;
+      if (!(state.isHost && state.hostUid === currentUid) || !roomRef) return;
+
+      const players = state.players || [];
+      const answers = state.answers || {};
 
       const grouping = {};
       CATEGORIES.forEach(c => grouping[c] = {});
@@ -574,7 +595,7 @@
               girls_name:sc.girls_name,
               animal:sc.animal,
               food:sc.food,
-              pitch:sc.pitch
+              pitch:sc.p
             },
             total: sc.total
           });
