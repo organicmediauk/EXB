@@ -6,7 +6,7 @@
 <title>Elizabeth Xi Bauer Sales Quiz — Synced</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
+  body{font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%, #764ba2 100%);min-height:100vh;padding:20px}
   .container{max-width:1200px;margin:0 auto;background:#fff;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.1);overflow:hidden}
   .header{background:linear-gradient(135deg,#2c3e50,#3498db);color:#fff;padding:30px;text-align:center}
   .header h1{font-size:2.2rem;margin-bottom:8px;font-weight:700}
@@ -117,14 +117,14 @@
     </div>
   </div>
 
-  <!-- Firebase -->
+  <!-- Firebase + App -->
   <script type="module">
     // ✅ Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyD6eKiFVGujxjO_9YHvLQXd1BPVQ6JOiEE",
       authDomain: "exb-quiz.firebaseapp.com",
       projectId: "exb-quiz",
-      storageBucket: "exb-quiz.appspot.com", // corrected
+      storageBucket: "exb-quiz.appspot.com",
       messagingSenderId: "738969851639",
       appId: "1:738969851639:web:b2859010985a240957e5f2"
     };
@@ -139,13 +139,8 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    // Sign in before wiring buttons, show helpful error if auth fails
-    try {
-      await signInAnonymously(auth);
-    } catch (e) {
-      alert("Anonymous auth failed. Enable it in Firebase Console → Authentication → Sign-in method.");
-      throw e;
-    }
+    try { await signInAnonymously(auth); }
+    catch (e) { alert("Anonymous auth failed. Enable it in Firebase Console → Authentication → Sign-in method."); throw e; }
 
     // UI elements
     const isHostEl = document.getElementById('isHost');
@@ -224,50 +219,120 @@
       }
     }
 
-    function renderPlayersTable() {
-      playersTableBody.innerHTML = '';
-      const letter = state.currentLetter || '?';
+    // --------- DOM helpers to avoid focus loss ----------
+    function ensureRow(player) {
+      let row = document.getElementById(`row-${player.id}`);
+      if (!row) {
+        row = document.createElement('tr');
+        row.id = `row-${player.id}`;
+        // Player name cell
+        const nameTd = document.createElement('td');
+        nameTd.className = 'player-name';
+        nameTd.id = `name-${player.id}`;
+        nameTd.textContent = player.name;
+        row.appendChild(nameTd);
 
+        // Category cells (create once)
+        CATEGORIES.forEach(cat => {
+          const td = document.createElement('td');
+          td.id = `cell-${player.id}-${cat}`;
+
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.id = `input-${player.id}-${cat}`;
+          input.dataset.player = player.id;
+          input.dataset.category = cat;
+          input.placeholder = `Starts with ${state.currentLetter || '?'}`;
+          input.disabled = (state.gameState !== 'playing');
+
+          // attach listener once
+          input.addEventListener('input', async (e)=>{
+            const pid = e.target.dataset.player;
+            const category = e.target.dataset.category;
+            const val = e.target.value;
+            if (!answersColRef) return;
+            const ansDoc = doc(answersColRef, pid);
+            try { await setDoc(ansDoc, { [category]: val }, { merge: true }); }
+            catch (err) { console.error(err); }
+          });
+
+          td.appendChild(input);
+
+          const small = document.createElement('small');
+          small.className = 'score-note';
+          small.id = `score-${player.id}-${cat}`;
+          td.appendChild(small);
+
+          row.appendChild(td);
+        });
+
+        // Total cell
+        const totalTd = document.createElement('td');
+        totalTd.className = 'total-score';
+        totalTd.id = `total-${player.id}`;
+        totalTd.textContent = String(player.total || 0);
+        row.appendChild(totalTd);
+
+        playersTableBody.appendChild(row);
+      }
+      return row;
+    }
+
+    function syncRowValues(player) {
+      // name
+      const nameEl = document.getElementById(`name-${player.id}`);
+      if (nameEl && nameEl.textContent !== player.name) nameEl.textContent = player.name;
+
+      // scores + placeholders + disabled state
+      CATEGORIES.forEach(cat => {
+        const input = document.getElementById(`input-${player.id}-${cat}`);
+        const scoreNote = document.getElementById(`score-${player.id}-${cat}`);
+        if (!input || !scoreNote) return;
+
+        // enable/disable without recreating
+        const shouldDisable = (state.gameState !== 'playing');
+        if (input.disabled !== shouldDisable) input.disabled = shouldDisable;
+
+        // placeholder reflects current letter
+        const desiredPh = `Starts with ${state.currentLetter || '?'}`;
+        if (input.placeholder !== desiredPh) input.placeholder = desiredPh;
+
+        // set value only if different (to preserve caret + IME)
+        const newVal = (state.answers[player.id]?.[cat] || '');
+        if (input.value !== newVal) input.value = newVal;
+
+        const sc = (player.scores?.[cat] || 0);
+        scoreNote.textContent = sc ? `(${sc} pts)` : '';
+      });
+
+      const totalEl = document.getElementById(`total-${player.id}`);
+      if (totalEl && String(player.total || 0) !== totalEl.textContent) {
+        totalEl.textContent = String(player.total || 0);
+      }
+    }
+
+    function removeMissingRows(currentPlayerIds) {
+      const rows = Array.from(playersTableBody.querySelectorAll('tr'));
+      rows.forEach(r => {
+        const pid = r.id.replace('row-','');
+        if (!currentPlayerIds.includes(pid)) r.remove();
+      });
+    }
+
+    function renderPlayersTable() {
+      // ensure all rows exist, then sync values
+      const ids = [];
       state.players
         .slice()
         .sort((a,b)=> (b.total||0)-(a.total||0))
         .forEach(p => {
-          const tr = document.createElement('tr');
-          let html = `<td class="player-name">${p.name}</td>`;
-          CATEGORIES.forEach(cat => {
-            const val = (state.answers[p.id]?.[cat]||'');
-            const score = (p.scores?.[cat]||0);
-            html += `
-              <td>
-                <input type="text" 
-                  ${state.gameState==='playing' ? '' : 'disabled'}
-                  data-player="${p.id}" data-category="${cat}"
-                  placeholder="Starts with ${letter}" value="${escapeHtml(val)}">
-                <small class="score-note">${score? `(${score} pts)` : ''}</small>
-              </td>`;
-          });
-          html += `<td class="total-score">${p.total||0}</td>`;
-          tr.innerHTML = html;
-          playersTableBody.appendChild(tr);
+          ids.push(p.id);
+          ensureRow(p);
+          syncRowValues(p);
         });
-
-      // input handlers for live write
-      playersTableBody.querySelectorAll('input[type="text"]').forEach(inp=>{
-        inp.addEventListener('input', async (e)=>{
-          const pid = e.target.dataset.player;
-          const cat = e.target.dataset.category;
-          const v = e.target.value;
-          if (!roomRef) return;
-          const ansDoc = doc(answersColRef, pid);
-          try {
-            await setDoc(ansDoc, { [cat]: v }, { merge: true });
-          } catch (err) {
-            console.error(err);
-            alert("Could not save answer. Check Firestore rules and network.");
-          }
-        });
-      });
+      removeMissingRows(ids);
     }
+    // ----------------------------------------------------
 
     function escapeHtml(str){
       return (str||'').replace(/[&<>'"]/g, s=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":"&#39;",'"':'&quot;' }[s]));
@@ -275,13 +340,8 @@
 
     // TIMER — based on server startAt
     let timerInterval = null;
-    function startLocalTimer() {
-      stopLocalTimer();
-      timerInterval = setInterval(updateTimerFace, 250);
-    }
-    function stopLocalTimer() {
-      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-    }
+    function startLocalTimer() { stopLocalTimer(); timerInterval = setInterval(updateTimerFace, 250); }
+    function stopLocalTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
     function updateTimerFace() {
       if (!state.startAt || state.gameState!=='playing') return;
       const startMs = state.startAt.toMillis();
@@ -311,7 +371,6 @@
       try {
         const exists = await getDoc(roomRef);
         if (!exists.exists()) {
-          // create new room
           await setDoc(roomRef, {
             createdAt: serverTimestamp(),
             gameState: 'waiting',
@@ -323,7 +382,7 @@
         }
       } catch (err) {
         console.error(err);
-        alert("Couldn't create/join room. Check your Firestore rules and that Firestore is enabled.");
+        alert("Couldn't create/join room. Check Firestore setup and rules.");
         return;
       }
 
@@ -358,9 +417,12 @@
         updateStatus();
         setControlsEnabled(true);
         calculateBtn.disabled = !(state.isHost && state.gameState==='finished');
+
+        // update placeholders/enabled state without nuking inputs
+        state.players.forEach(syncRowValues);
       }, (err)=>{
         console.error(err);
-        alert("Realtime updates failed. Check network and Firestore rules.");
+        alert("Realtime room updates failed. Check rules / network.");
       });
 
       unsubscribePlayers = onSnapshot(playersColRef, (qs)=>{
@@ -369,9 +431,12 @@
       });
 
       unsubscribeAnswers = onSnapshot(answersColRef, (qs)=>{
-        state.answers = {};
-        qs.forEach(d => { state.answers[d.id] = d.data(); });
-        renderPlayersTable();
+        // only update values; do not rebuild the DOM
+        const newAnswers = {};
+        qs.forEach(d => { newAnswers[d.id] = d.data(); });
+        state.answers = newAnswers;
+        // sync values into existing inputs
+        state.players.forEach(syncRowValues);
       });
 
       roomBadge.style.display = 'inline-block';
@@ -414,6 +479,8 @@
       const letter = letters[Math.floor(Math.random()*letters.length)];
       try {
         await updateDoc(roomRef, { currentLetter: letter, gameState: 'waiting', startAt: null, results: null });
+        // Update placeholders without re-render
+        state.players.forEach(syncRowValues);
       } catch (err) {
         console.error(err);
         alert("Failed to generate letter. Check rules.");
@@ -439,6 +506,8 @@
           const pDoc = doc(playersColRef, p.id);
           await updateDoc(pDoc, { scores: { boys_name:0,girls_name:0,animal:0,food:0,pitch:0 }, total: 0 });
         }
+        // enable inputs visually
+        state.players.forEach(syncRowValues);
       } catch (err) {
         console.error(err);
         alert("Failed to start round. Check rules.");
@@ -449,6 +518,8 @@
       if (!state.isHost || !roomRef) return;
       try {
         await updateDoc(roomRef, { gameState: 'finished' });
+        // disable inputs visually
+        state.players.forEach(syncRowValues);
       } catch (err) {
         console.error(err);
         alert("Failed to end round. Check rules.");
